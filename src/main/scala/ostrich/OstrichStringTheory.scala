@@ -423,6 +423,17 @@ class OstrichStringTheory(transducers : Seq[(String, Transducer)],
           predToEq.reducePredicatesToEquations
 
         case Plugin.GoalState.Intermediate =>
+          if (theoryFlags.nielsenSplitter) {
+            
+            val commSplit = nielsenSplitter.nielsenCommutationSplit
+            if (commSplit.nonEmpty) {
+              nielsenSplitter.printSharedNonTerminalEquations()
+              commSplit
+              
+             }
+            else nielsenSplitter.splitEquation
+          } else
+            List()
           (if (theoryFlags.nielsenSplitter)
              nielsenSplitter.splitEquation
            else
