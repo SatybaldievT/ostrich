@@ -10,3 +10,72 @@
 /project/project
 /project/target
 /project/build.properties
+
+# =====================================================================
+# Исследовательский воркспейс: игнорируем ВЕСЬ генерируемый мусор,
+# оставляем только то, что нужно для ОРКЕСТРАТОРА и ВИЗУАЛИЗАЦИИ ДЕРЕВА.
+# =====================================================================
+# крэш-логи JVM, кэши, временные
+hs_err_pid*.log
+*.log
+__pycache__/
+*.pyc
+*.test
+# сгенерированные SMT/выгрузки/картинки/доки
+*.smt2
+*.pdf
+*.png
+*.svg
+*.dot
+*.md
+*.tex
+*.txt
+*.bib
+*.aux
+# рабочие/выходные каталоги
+coursework_out/
+ostrich_bench_out/
+ecma2020/target/
+.vscode/
+# прочий мусор: скрипты-обёртки, jar-лаунчер, latex-aux, опечатки расширений
+*.jar
+*.bbl
+*.bcf
+*.blg
+*.run.xml
+*.toc
+*.txy
+.scalafmt.conf
+# все скрипты и CSV по умолчанию игнорируем — нужные вернём ниже через '!'
+*.py
+*.csv
+*.json
+*.html
+
+# ---- ОСТАВИТЬ: исходники оркестратора ----
+!corpus_pipeline.py
+!prove_by_homomorphism.py
+!prove_ambiguous_by_homomorphism.py
+!prove_unambiguous_by_homomorphism.py
+!ambiguity_heuristic.py
+!unambiguity_heuristic.py
+!ostrich_runner.py
+!ostrich_session.py
+!ostrich_benchmarks.py
+!gen_smt.py
+!check_uniqueness.py
+
+# ---- ОСТАВИТЬ: входные данные оркестратора ----
+!ambiguity_lemmas.csv
+!ambiguity_proven.csv
+!ambiguity_not_proven.csv
+!patterns_ambiguity.csv
+!patterns_ambiguity_col.csv
+!patterns_ambiguity_col_missing_from_proven_or_lemmas.csv
+
+# ---- ОСТАВИТЬ: визуализация дерева ----
+!visualize_decision_tree.py
+!decision_tree.json
+!decision_tree.png
+!decision_tree.svg
+!decision_tree.html

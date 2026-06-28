@@ -65,6 +65,9 @@ case class OFlags(
   forwardPropagation      : Boolean = false,
   backwardPropagation     : Boolean = true,
   nielsenSplitter         : Boolean = true,
+  // Course-work extension: commutation-class splitting / normalization.
+  // Off by default, switched on with the +commutation key.
+  commutation             : Boolean = true,
   regexTranslator         : OFlags.RegexTranslator.Value =
                               OFlags.RegexTranslator.Hybrid,
 
