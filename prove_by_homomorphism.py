@@ -42,6 +42,7 @@ import csv
 import os
 
 import ambiguity_heuristic as ah
+from canonical import canonical
 
 
 # ===========================================================================
@@ -413,25 +414,56 @@ def derive_amb(P, Q, witP):
 # ===========================================================================
 # единая классификация
 # ===========================================================================
-def classify(Q, unamb_lemmas, amb_lemmas):
+def build_canon_index(unamb_lemmas, amb_lemmas):
+    """Индексы 'каноническая форма -> лемма' для мгновенного поиска переименований."""
+    un_idx = {}
+    for P in unamb_lemmas:
+        un_idx.setdefault(canonical(P), P)
+    amb_idx = {}
+    for P, witP in amb_lemmas:
+        amb_idx.setdefault(canonical(P), (P, witP))
+    return un_idx, amb_idx
+
+
+def classify(Q, unamb_lemmas, amb_lemmas, canon_index=None):
     """Попытаться вывести вердикт для Q. Возвращает dict с полями результата.
 
     verdict: ОДНОЗНАЧЕН / НЕОДНОЗНАЧЕН / не выведено / КОНФЛИКТ(!).
+
+    Сначала пробуем БЫСТРЫЙ путь: точное совпадение КАНОНИЧЕСКОЙ формы Q с уже
+    проанализированной леммой (Q — её переименование). Это ловит переименования
+    мгновенно, без перебора всех лемм. Свидетель морфизма всё равно строится
+    (derive_*), поэтому вывод остаётся проверяемым.
     """
-    # неоднозначность
+    cq = canonical(Q)
+
+    # неоднозначность: быстрый путь по канону, затем общий перебор
     amb_P = amb_w = None
-    for P, witP in amb_lemmas:
+    if canon_index is not None and cq in canon_index[1]:
+        P, witP = canon_index[1][cq]
         w = derive_amb(P, Q, witP)
         if w is not None:
             amb_P, amb_w = P, w
-            break
-    # однозначность
+    if amb_w is None:
+        for P, witP in amb_lemmas:
+            w = derive_amb(P, Q, witP)
+            if w is not None:
+                amb_P, amb_w = P, w
+                break
+
+    # однозначность: быстрый путь по канону, затем общий перебор
     un_P = un_w = None
-    for P in unamb_lemmas:
+    if canon_index is not None and cq in canon_index[0]:
+        P = canon_index[0][cq]
         w = derive_unamb(P, Q)
         if w is not None:
             un_P, un_w = P, w
-            break
+    if un_w is None:
+        for P in unamb_lemmas:
+            w = derive_unamb(P, Q)
+            if w is not None:
+                un_P, un_w = P, w
+                break
 
     if amb_w is not None and un_w is not None:
         verdict = "КОНФЛИКТ(!)"        # не должно случаться — сигнал об ошибке
@@ -618,8 +650,11 @@ def main():
 
     unamb = read_unambiguous_lemmas(*args.unamb_lemmas)
     amb = read_ambiguous_lemmas(*args.amb_lemmas)
+    canon_index = build_canon_index(unamb, amb)
     print("Однозначных лемм: %d ;  неоднозначных лемм со свидетелем: %d"
           % (len(unamb), len(amb)))
+    print("Канонических ключей в базе: однозначных %d, неоднозначных %d"
+          % (len(canon_index[0]), len(canon_index[1])))
 
     targets = args.targets or (read_patterns(args.input) if args.input else [])
     if not targets:
@@ -635,7 +670,7 @@ def main():
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         for Q in targets:
-            row = classify(Q, unamb, amb)
+            row = classify(Q, unamb, amb, canon_index=canon_index)
             w.writerow(row)
             f.flush()
             v = row["verdict"]

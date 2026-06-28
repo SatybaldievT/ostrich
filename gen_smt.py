@@ -64,6 +64,38 @@ def build_side(tokens, suffix: str):
     return parts
 
 
+def canonical_var_map(tokens):
+    """Переменная -> индекс 1..n в порядке первого вхождения."""
+    vmap = {}
+    for tok in tokens:
+        if is_variable(tok) and tok not in vmap:
+            vmap[tok] = len(vmap) + 1
+    return vmap
+
+
+def canonical_literal_map(tokens):
+    """Литерал -> канон. буква A,B,C,... в порядке первого вхождения."""
+    cmap = {}
+    for tok in tokens:
+        if not is_variable(tok):
+            lv = literal_value(tok)
+            if lv not in cmap:
+                cmap[lv] = chr(ord("A") + len(cmap))
+    return cmap
+
+
+def build_side_canonical(tokens, prefix: str, vmap, cmap):
+    """Сторона уравнения с КАНОНИЧЕСКИМИ именами: переменные prefix+индекс,
+    литералы — канонические буквы. prefix='x' (копия 1) или 'y' (копия 2)."""
+    parts = []
+    for tok in tokens:
+        if is_variable(tok):
+            parts.append(f"{prefix}{vmap[tok]}")
+        else:
+            parts.append(as_literal(cmap[literal_value(tok)]))
+    return parts
+
+
 def literal_value(token: str) -> str:
     """Содержимое литерала без обрамляющих кавычек (для regex-ограничений)."""
     if len(token) >= 2 and token.startswith('"') and token.endswith('"'):
@@ -79,7 +111,8 @@ def alphabet_regex(literals) -> str:
     return f"(re.* (re.union {' '.join(res)}))"
 
 
-def generate(pattern: str, distinct_var=None, mode: str = "suffix-regex") -> str:
+def generate(pattern: str, distinct_var=None, mode: str = "suffix-regex",
+             canonical: bool = False) -> str:
     tokens = tokenize(pattern)
     if not tokens:
         raise ValueError("Пустой паттерн")
@@ -100,6 +133,46 @@ def generate(pattern: str, distinct_var=None, mode: str = "suffix-regex") -> str
             lv = literal_value(tok)
             if lv not in literals:
                 literals.append(lv)
+
+    # --- КАНОНИЧЕСКИЙ режим: переименования дают ОДИНАКОВЫЙ smt2 ---
+    # переменные -> x1..xn (копия 1) / y1..yn (копия 2); литералы -> A,B,C,...
+    if canonical:
+        vmap = canonical_var_map(tokens)
+        cmap = canonical_literal_map(tokens)
+        # имена копий: x{i} и y{i}; различающая переменная -> её канон. имена
+        if distinct_var is None:
+            distinct_idx = vmap[variables[0]]
+        elif distinct_var not in variables:
+            raise ValueError(f"Переменная '{distinct_var}' отсутствует в паттерне")
+        else:
+            distinct_idx = vmap[distinct_var]
+        d1, d2 = f"x{distinct_idx}", f"y{distinct_idx}"
+        n = len(vmap)
+
+        lines = ["(set-logic QF_SLIA)", ""]
+        for v in range(1, n + 1):
+            lines.append(f"(declare-fun x{v} () String)")
+        for v in range(1, n + 1):
+            lines.append(f"(declare-fun y{v} () String)")
+        lines.append("")
+
+        if mode == "neq":
+            lines.append(f"(assert (not (= {d1} {d2})))")
+        else:
+            lines.append(f"(assert (str.suffixof {d1} {d2}))")
+            lines.append(f"(assert (< (str.len {d1}) (str.len {d2})))")
+            if cmap:
+                re = alphabet_regex([cmap[lv] for lv in literals])
+                for v in range(1, n + 1):
+                    lines.append(f"(assert (str.in_re x{v} {re}))")
+                for v in range(1, n + 1):
+                    lines.append(f"(assert (str.in_re y{v} {re}))")
+
+        left = " ".join(build_side_canonical(tokens, "x", vmap, cmap))
+        right = " ".join(build_side_canonical(tokens, "y", vmap, cmap))
+        lines.append(f"(assert (= (str.++ {left}) (str.++ {right})))")
+        lines += ["", "(check-sat)", "(get-model)", ""]
+        return "\n".join(lines)
 
     # Переменная, по которой требуем различие двух копий (по умолчанию первая)
     if distinct_var is None:
@@ -153,10 +226,13 @@ def main():
                     default="suffix-regex",
                     help="форма различия копий: suffix-regex (str.suffixof + "
                          "< len + regex, по умолчанию) или neq (неравенство)")
+    ap.add_argument("-c", "--canonical", action="store_true",
+                    help="канонические имена: переменные x1..xn/y1..yn, буквы "
+                         "A,B,C,... (переименования дают идентичный smt2)")
     args = ap.parse_args()
 
     pattern = args.pattern if args.pattern is not None else sys.stdin.read().strip()
-    smt = generate(pattern, args.distinct, args.mode)
+    smt = generate(pattern, args.distinct, args.mode, canonical=args.canonical)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
